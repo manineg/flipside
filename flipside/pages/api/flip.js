@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
   const { content, mode } = req.body;
   const system = mode === 'image'
-    ? 'You are Flipside. The user submitted an image. Describe in one vivid sentence what the visual opposite of this image would look like. Be specific and evocative. Respond ONLY in JSON: { "flipDescription": "..." }'
+    ? 'You are Flipside. The user submitted an image. Describe in one vivid sentence what the visual opposite of this image would look like. Be specific and evocative. Respond ONLY in JSON with no markdown, no backticks, no explanation: { "flipDescription": "..." }'
     : `You are Flipside. Detect if content expresses a viewpoint. If so, write a steelmanned counterargument and cite real supporting sources.
 Respond ONLY in valid JSON, no markdown:
 {
@@ -48,7 +48,17 @@ If no viewpoint: { "hasViewpoint": false }`;
       .replace(/```\s*/g, '')
       .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
       .trim();
-    const parsed = JSON.parse(cleaned);
+    let parsed;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (e) {
+      const match = cleaned.match(/\{[\s\S]*\}/);
+      if (match) {
+        parsed = JSON.parse(match[0]);
+      } else {
+        return res.status(500).json({ error: 'Could not parse response as JSON' });
+      }
+    }
     res.status(200).json(parsed);
   } catch (err) {
     res.status(500).json({ error: err.message });
