@@ -10,7 +10,7 @@ export default function Flipside() {
   const [uploadedFileName, setUploadedFileName] = useState('');
   const [imageBase64, setImageBase64] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
-  const [step, setStep] = useState('input'); // input | loading | result
+  const [step, setStep] = useState('input');
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const textFileRef = useRef();
@@ -28,6 +28,10 @@ export default function Flipside() {
   const handleImg = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image must be under 5MB.');
+      return;
+    }
     const reader = new FileReader();
     reader.onload = (ev) => {
       setImageBase64(ev.target.result.split(',')[1]);
@@ -51,7 +55,7 @@ export default function Flipside() {
       mode = 'image';
       content = [
         { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-        { type: 'text', text: 'Describe the visual flip of this image.' }
+        { type: 'text', text: 'First describe what this image shows in one sentence, then describe the visual opposite in one sentence.' }
       ];
     }
 
@@ -112,6 +116,7 @@ export default function Flipside() {
           .file-name { font-size: 12px; color: #b5602a; margin-top: 6px; font-weight: 500; }
           .upload-box { border: 2px dashed #b5602a; border-radius: 8px; padding: 32px 16px; text-align: center; cursor: pointer; background: #fff8f4; }
           .upload-box-text { font-size: 14px; color: #888; margin-top: 10px; }
+          .upload-box-sub { font-size: 11px; color: #aaa; margin-top: 6px; }
           .coming { background: #fff8f4; border: 2px dashed #b5602a66; border-radius: 8px; padding: 32px 16px; text-align: center; }
           .coming-text { font-size: 14px; color: #b5602a; font-weight: 600; margin-top: 10px; }
           .coming-sub { font-size: 12px; color: #aaa; margin-top: 4px; }
@@ -180,8 +185,10 @@ export default function Flipside() {
               <>
                 <div className="upload-box" onClick={() => imgFileRef.current.click()}>
                   <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="#b5602a" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                  <div className="upload-box-text">Tap to upload · JPG · PNG · WEBP</div>
-                  <input ref={imgFileRef} type="file" accept="image/*" style={{display:'none'}} onChange={handleImg} />
+                  <div className="upload-box-text">Tap to upload an image</div>
+                  <div className="upload-box-sub">JPG · PNG · WEBP · GIF · Max 5MB</div>
+                  <div className="upload-box-sub">No HEIC, RAW, or TIFF files</div>
+                  <input ref={imgFileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" style={{display:'none'}} onChange={handleImg} />
                 </div>
                 {imagePreview && <img className="preview" src={imagePreview} alt="preview" />}
               </>
@@ -241,6 +248,8 @@ export default function Flipside() {
             )}
             {result.mode === 'image' && (
               <>
+                <div className="section-label">Visual summary</div>
+                <div className="claim-box">{result.data.visualSummary || result.data.flipDescription}</div>
                 <div className="section-label">The visual flip</div>
                 <div className="claim-box">{result.data.flipDescription}</div>
                 <div style={{fontSize:13,color:'#999',marginTop:8}}>Visual generation coming in the next version.</div>
@@ -251,5 +260,7 @@ export default function Flipside() {
         )}
       </div>
     </>
+  );
+}
   );
 }
