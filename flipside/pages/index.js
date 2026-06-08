@@ -55,7 +55,7 @@ export default function Flipside() {
       mode = 'image';
       content = [
         { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: imageBase64 } },
-        { type: 'text', text: 'First describe what this image shows in one sentence, then describe the visual opposite in one sentence.' }
+        { type: 'text', text: 'Describe this image and its visual opposite.' }
       ];
     }
 
@@ -249,7 +249,7 @@ export default function Flipside() {
             {result.mode === 'image' && (
               <>
                 <div className="section-label">Visual summary</div>
-                <div className="claim-box">{result.data.visualSummary || result.data.flipDescription}</div>
+                <div className="claim-box">{result.data.visualSummary || 'Image received.'}</div>
                 <div className="section-label">The visual flip</div>
                 <div className="claim-box">{result.data.flipDescription}</div>
                 <div style={{fontSize:13,color:'#999',marginTop:8}}>Visual generation coming in the next version.</div>
@@ -260,7 +260,5 @@ export default function Flipside() {
         )}
       </div>
     </>
-  );
-}
   );
 }
