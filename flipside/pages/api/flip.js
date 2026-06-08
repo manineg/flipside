@@ -43,7 +43,12 @@ If no viewpoint: { "hasViewpoint": false }`;
     }
     const raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
     if (!raw) return res.status(500).json({ error: 'No text response from API' });
-    const parsed = JSON.parse(raw.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim());
+    const cleaned = raw
+  .replace(/```json\s*/g, '')
+  .replace(/```\s*/g, '')
+  .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
+  .trim();
+const parsed = JSON.parse(cleaned); '').trim());
     res.status(200).json(parsed);
   } catch (err) {
     res.status(500).json({ error: err.message });
