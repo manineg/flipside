@@ -1,6 +1,26 @@
+function sanitizeJsonString(str) {
+  let result = '';
+  let inString = false;
+  let escapeNext = false;
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+    if (escapeNext) { result += char; escapeNext = false; continue; }
+    if (char === '\\') { result += char; escapeNext = true; continue; }
+    if (char === '"') { inString = !inString; result += char; continue; }
+    if (inString && (char === '\n' || char === '\r' || char === '\t')) {
+      result += char === '\n' ? '\\n' : char === '\r' ? '\\r' : '\\t';
+      continue;
+    }
+    result += char;
+  }
+  return result;
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
+
   const { content, mode } = req.body;
+
   const system = mode === 'image'
     ? 'You are Flipside. The user submitted an image. Respond ONLY in JSON with no markdown, no backticks, no explanation: { "visualSummary": "One sentence describing what this image shows.", "flipDescription": "One sentence describing the visual opposite of this image." }'
     : `You are Flipside. Detect if content expresses a viewpoint. If so, write a steelmanned counterargument and cite real supporting sources.
@@ -17,6 +37,7 @@ Respond ONLY in valid JSON, no markdown:
   ]
 }
 If no viewpoint: { "hasViewpoint": false }`;
+
   const body = {
     model: 'claude-sonnet-5',
     max_tokens: 4000,
@@ -24,9 +45,11 @@ If no viewpoint: { "hasViewpoint": false }`;
     system,
     messages: [{ role: 'user', content }],
   };
+
   if (mode === 'text') {
     body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
   }
+
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -38,28 +61,37 @@ If no viewpoint: { "hasViewpoint": false }`;
       },
       body: JSON.stringify(body),
     });
+
     const data = await response.json();
+
     if (!data.content || !Array.isArray(data.content)) {
       return res.status(500).json({ error: data.error?.message || 'Unexpected API response' });
     }
+
     const raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+
     if (!raw) return res.status(500).json({ error: 'No text response from API' });
+
     const cleaned = raw
       .replace(/```json\s*/g, '')
       .replace(/```\s*/g, '')
       .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
       .trim();
+
+    const sanitized = sanitizeJsonString(cleaned);
+
     let parsed;
     try {
-      parsed = JSON.parse(cleaned);
+      parsed = JSON.parse(sanitized);
     } catch (e) {
-      const match = cleaned.match(/\{[\s\S]*\}/);
+      const match = sanitized.match(/\{[\s\S]*\}/);
       if (match) {
         parsed = JSON.parse(match[0]);
       } else {
         return res.status(500).json({ error: 'Could not parse response as JSON' });
       }
     }
+
     res.status(200).json(parsed);
   } catch (err) {
     res.status(500).json({ error: err.message });
