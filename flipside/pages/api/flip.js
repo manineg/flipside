@@ -18,7 +18,7 @@ Respond ONLY in valid JSON, no markdown:
 }
 If no viewpoint: { "hasViewpoint": false }`;
   const body = {
-    model: 'claude-sonnet-4-20250514',
+    model: 'claude-sonnet-5',
     max_tokens: 1000,
     system,
     messages: [{ role: 'user', content }],
