@@ -20,6 +20,7 @@ If no viewpoint: { "hasViewpoint": false }`;
   const body = {
     model: 'claude-sonnet-5',
     max_tokens: 4000,
+    thinking: { type: 'disabled' },
     system,
     messages: [{ role: 'user', content }],
   };
@@ -48,7 +49,6 @@ If no viewpoint: { "hasViewpoint": false }`;
       .replace(/```\s*/g, '')
       .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
       .trim();
-    console.log('RAW MODEL OUTPUT:', raw);
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
