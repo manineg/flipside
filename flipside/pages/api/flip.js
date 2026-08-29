@@ -48,6 +48,7 @@ If no viewpoint: { "hasViewpoint": false }`;
       .replace(/```\s*/g, '')
       .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
       .trim();
+    console.log('RAW MODEL OUTPUT:', raw);
     let parsed;
     try {
       parsed = JSON.parse(cleaned);
