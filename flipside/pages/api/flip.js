@@ -1,42 +1,55 @@
-function sanitizeJsonString(str) {
-  let result = '';
-  let inString = false;
-  let escapeNext = false;
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i];
-    if (escapeNext) { result += char; escapeNext = false; continue; }
-    if (char === '\\') { result += char; escapeNext = true; continue; }
-    if (char === '"') { inString = !inString; result += char; continue; }
-    if (inString && (char === '\n' || char === '\r' || char === '\t')) {
-      result += char === '\n' ? '\\n' : char === '\r' ? '\\r' : '\\t';
-      continue;
-    }
-    result += char;
-  }
-  return result;
-}
+// Flipside API route — returns structured results via a tool call,
+// so the model never has to hand-write JSON (no more parse errors from quotes).
+
+const TEXT_TOOL = {
+  name: 'submit_flip',
+  description: 'Submit the final Flipside analysis. Call this exactly once, after any web searches.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      hasViewpoint: { type: 'boolean', description: 'True if the content expresses a viewpoint.' },
+      claim: { type: 'string', description: 'One sentence stating the viewpoint.' },
+      flip: { type: 'string', description: '3-4 paragraphs steelmanning the opposition as a thoughtful op-ed. Separate paragraphs with blank lines.' },
+      sources: {
+        type: 'array',
+        description: 'Four real sources supporting the opposing view, found via web search.',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string' },
+            outlet: { type: 'string' },
+            description: { type: 'string', description: 'One sentence on relevance.' },
+          },
+          required: ['title', 'outlet', 'description'],
+        },
+      },
+    },
+    required: ['hasViewpoint'],
+  },
+};
+
+const IMAGE_TOOL = {
+  name: 'submit_visual_flip',
+  description: 'Submit the visual analysis of the image.',
+  input_schema: {
+    type: 'object',
+    properties: {
+      visualSummary: { type: 'string', description: 'One sentence describing what this image shows.' },
+      flipDescription: { type: 'string', description: 'One sentence describing the visual opposite of this image.' },
+    },
+    required: ['visualSummary', 'flipDescription'],
+  },
+};
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
   const { content, mode } = req.body;
+  const isImage = mode === 'image';
 
-  const system = mode === 'image'
-    ? 'You are Flipside. The user submitted an image. Respond ONLY in JSON with no markdown, no backticks, no explanation: { "visualSummary": "One sentence describing what this image shows.", "flipDescription": "One sentence describing the visual opposite of this image." }'
-    : `You are Flipside. Detect if content expresses a viewpoint. If so, write a steelmanned counterargument and cite real supporting sources.
-Respond ONLY in valid JSON, no markdown:
-{
-  "hasViewpoint": true,
-  "claim": "One sentence stating the viewpoint",
-  "flip": "3-4 paragraphs steelmanning the opposition as a thoughtful op-ed",
-  "sources": [
-    { "title": "...", "outlet": "...", "description": "One sentence on relevance" },
-    { "title": "...", "outlet": "...", "description": "..." },
-    { "title": "...", "outlet": "...", "description": "..." },
-    { "title": "...", "outlet": "...", "description": "..." }
-  ]
-}
-If no viewpoint: { "hasViewpoint": false }`;
+  const system = isImage
+    ? 'You are Flipside. The user submitted an image. Describe it and its visual opposite, then call submit_visual_flip.'
+    : 'You are Flipside. Detect if the content expresses a viewpoint. If it does, use web search to find real sources, write a steelmanned counterargument, and call submit_flip with hasViewpoint true, the claim, the flip, and four sources. If it does not, call submit_flip with hasViewpoint false. Always finish by calling submit_flip.';
 
   const body = {
     model: 'claude-sonnet-5',
@@ -46,8 +59,12 @@ If no viewpoint: { "hasViewpoint": false }`;
     messages: [{ role: 'user', content }],
   };
 
-  if (mode === 'text') {
-    body.tools = [{ type: 'web_search_20250305', name: 'web_search' }];
+  if (isImage) {
+    body.tools = [IMAGE_TOOL];
+    body.tool_choice = { type: 'tool', name: 'submit_visual_flip' };
+  } else {
+    // "auto" (the default) lets Claude search first, then submit.
+    body.tools = [{ type: 'web_search_20250305', name: 'web_search' }, TEXT_TOOL];
   }
 
   try {
@@ -68,31 +85,15 @@ If no viewpoint: { "hasViewpoint": false }`;
       return res.status(500).json({ error: data.error?.message || 'Unexpected API response' });
     }
 
-    const raw = data.content.filter(b => b.type === 'text').map(b => b.text).join('');
+    const toolName = isImage ? 'submit_visual_flip' : 'submit_flip';
+    const result = data.content.find(b => b.type === 'tool_use' && b.name === toolName);
 
-    if (!raw) return res.status(500).json({ error: 'No text response from API' });
-
-    const cleaned = raw
-      .replace(/```json\s*/g, '')
-      .replace(/```\s*/g, '')
-      .replace(/<cite[^>]*>(.*?)<\/cite>/gs, '$1')
-      .trim();
-
-    const sanitized = sanitizeJsonString(cleaned);
-
-    let parsed;
-    try {
-      parsed = JSON.parse(sanitized);
-    } catch (e) {
-      const match = sanitized.match(/\{[\s\S]*\}/);
-      if (match) {
-        parsed = JSON.parse(match[0]);
-      } else {
-        return res.status(500).json({ error: 'Could not parse response as JSON' });
-      }
+    if (!result) {
+      console.error('No submit tool call. stop_reason:', data.stop_reason);
+      return res.status(500).json({ error: 'The analysis did not complete. Please try again.' });
     }
 
-    res.status(200).json(parsed);
+    res.status(200).json(result.input);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
